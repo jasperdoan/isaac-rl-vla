@@ -26,6 +26,9 @@ environments = [
   "sys_platform == 'linux' and implementation_name == 'cpython' and python_version == '3.11'",
   "sys_platform == 'win32' and implementation_name == 'cpython' and python_version == '3.11'"
 ]
+override-dependencies = [
+    "flatdict>=4.1.0"
+]
 
 [[tool.uv.index]]
 url = "https://pypi.nvidia.com/"
