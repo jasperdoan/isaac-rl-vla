@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 import torch
 from isaaclab.assets import RigidObject
 from isaaclab.managers import SceneEntityCfg
-from isaaclab.utils.math import subtract_frame_transforms
+from isaaclab.utils.math import subtract_frame_transforms, quat_mul
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
@@ -50,6 +50,7 @@ def reset_root_state_annular(
     z_offset: float,
     angle_min: float = -math.pi / 3,
     angle_max: float = math.pi / 3,
+    randomize_yaw: bool = False,
     asset_cfg: SceneEntityCfg = SceneEntityCfg("pen"),
 ):
     """Reset root state to a random position within an annular region.
@@ -65,6 +66,8 @@ def reset_root_state_annular(
         z_offset: Height offset above table surface (meters).
         angle_min: Minimum angle in radians (default: -60 degrees).
         angle_max: Maximum angle in radians (default: +60 degrees).
+        randomize_yaw: If True, apply a random Z-axis rotation to the
+            default orientation (e.g. pen pointing in random direction).
         asset_cfg: The asset to reset.
     """
     asset: RigidObject = env.scene[asset_cfg.name]
@@ -84,7 +87,17 @@ def reset_root_state_annular(
     root_states[:, 1] = r * torch.sin(theta) + env.scene.env_origins[env_ids, 1]
     root_states[:, 2] = z_offset + env.scene.env_origins[env_ids, 2]
 
-    # Keep default orientation, zero velocities
+    # Randomize yaw (Z-axis rotation) composited with default orientation
+    if randomize_yaw:
+        yaw = torch.rand(n, device=env.device) * 2 * math.pi  # [0, 2pi)
+        # Quaternion for Z-axis rotation: (cos(yaw/2), 0, 0, sin(yaw/2))
+        q_yaw = torch.zeros(n, 4, device=env.device)
+        q_yaw[:, 0] = torch.cos(yaw / 2)
+        q_yaw[:, 3] = torch.sin(yaw / 2)
+        # Compose: q_yaw * q_default → rotates the default orientation by yaw
+        root_states[:, 3:7] = quat_mul(q_yaw, root_states[:, 3:7])
+
+    # Zero velocities
     root_states[:, 7:13] = 0.0
 
     asset.write_root_state_to_sim(root_states, env_ids)

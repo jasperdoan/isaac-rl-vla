@@ -28,7 +28,7 @@ ASSETS_DIR = Path(__file__).resolve().parent
 ASSETS = [
     # (filename,         kinematic,  mass_kg)
     ("pen.usd",        False,      0.012),   # dynamic, 12g
-    ("pen_holder.usd", True,       0.100),   # static/kinematic
+    ("pen_holder.usd", False,      0.100),   # dynamic, 100g (can be knocked over)
 ]
 
 

@@ -54,14 +54,14 @@ PEN_SCALE    = 0.0002
 HOLDER_SCALE = 0.0075
 
 # Table dimensions
-TABLE_LENGTH = 24 * INCHES_TO_METERS   # 0.6096m 
-TABLE_WIDTH = 48 * INCHES_TO_METERS    # 0.9144m 
+TABLE_LENGTH = 36 * INCHES_TO_METERS   # 0.6096m 
+TABLE_WIDTH = 60 * INCHES_TO_METERS    # 0.9144m 
 TABLE_HEIGHT = 29 * INCHES_TO_METERS   # 0.7366m (Z axis)
 TABLE_TOP_THICKNESS = 0.03             # 3cm thick tabletop slab
 
 # Reachable annular region (from robot center)
-REACH_MIN = 4 * INCHES_TO_METERS      # 0.1016m - too close below this
-REACH_MAX = 14 * INCHES_TO_METERS     # 0.3556m - too far beyond this
+REACH_MIN = 6 * INCHES_TO_METERS      # 0.1016m - too close below this
+REACH_MAX = 16 * INCHES_TO_METERS     # 0.3556m - too far beyond this
 
 # Camera positions
 FRONT_CAM_FORWARD = 24 * INCHES_TO_METERS   # 0.6096m from robot center
@@ -76,6 +76,7 @@ PEN_MASS = 0.012         # ~12 grams
 # Pen holder dimensions (wire mesh cup approximation)
 HOLDER_RADIUS = 0.04     # 8cm diameter
 HOLDER_HEIGHT = 0.10     # 10cm tall
+HOLDER_MASS = 0.100      # ~100 grams
 
 
 ##
@@ -144,18 +145,23 @@ class PenPickupSceneCfg(InteractiveSceneCfg):
         ),
     )
 
-    # -- Pen Holder (kinematic, does not move) --
+    # -- Pen Holder (dynamic rigid body, can be knocked over) --
     # Loaded from assets/pen_holder.usd (converted from pen_holder.fbx).
     # Scale is controlled by HOLDER_SCALE at the top of this file.
-    # The mesh is hollow visually but collision is convexHull by default (solid).
-    # For a physically hollow holder, open the USD in Isaac Sim and set
-    # Collision Approximation to "convexDecomposition" on the mesh prim.
     pen_holder: RigidObjectCfg = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/PenHolder",
         spawn=sim_utils.UsdFileCfg(
             usd_path=str(ASSETS_DIR / "pen_holder.usd"),
             scale=(HOLDER_SCALE, HOLDER_SCALE, HOLDER_SCALE),
-            rigid_props=RigidBodyPropertiesCfg(kinematic_enabled=True),
+            rigid_props=RigidBodyPropertiesCfg(
+                solver_position_iteration_count=16,
+                solver_velocity_iteration_count=1,
+                max_angular_velocity=1000.0,
+                max_linear_velocity=1000.0,
+                max_depenetration_velocity=5.0,
+                disable_gravity=False,
+            ),
+            mass_props=MassPropertiesCfg(mass=HOLDER_MASS),
             collision_props=CollisionPropertiesCfg(),
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
@@ -312,6 +318,7 @@ class EventCfg:
             "z_offset": PEN_RADIUS + 0.001,         # pen rests on surface
             "angle_min": -math.pi / 3,              # -60 degrees
             "angle_max": math.pi / 3,               # +60 degrees
+            "randomize_yaw": True,                   # random pen orientation
             "asset_cfg": SceneEntityCfg("pen"),
         },
     )
@@ -395,6 +402,12 @@ class TerminationsCfg:
     pen_dropped = DoneTerm(
         func=mdp.pen_dropped_off_table,
         params={"minimum_height": -0.05},
+    )
+
+    # Pen holder knocked over (tilted >60 degrees)
+    holder_knocked = DoneTerm(
+        func=mdp.pen_holder_knocked_over,
+        params={"tilt_threshold": 0.5},
     )
 
 
