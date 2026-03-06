@@ -11,6 +11,10 @@
 **/*.dmp
 **/.thumbs
 
+# 3D Assets
+**/*.obj
+**/*.fbx
+
 # # No USD files allowed in the repo
 **/*.usd
 **/*.usda

@@ -15,6 +15,7 @@ Scene includes:
 
 import math
 from dataclasses import MISSING
+from pathlib import Path
 
 import isaaclab.sim as sim_utils
 import isaac_so_arm101.tasks.pen_pickup.mdp as mdp
@@ -41,6 +42,16 @@ from isaaclab.utils import configclass
 # Unit conversions
 # ==============================================================================
 INCHES_TO_METERS = 0.0254
+
+# Path to the assets/ folder next to this file
+# After converting FBX → USD (see assets/convert_assets.py), the files are:
+#   assets/pen.usd  and  assets/pen_holder.usd
+ASSETS_DIR = Path(__file__).resolve().parent / "assets"
+
+# 3D model scales — FBX files from Sketchfab are usually authored in centimetres.
+# 0.01 converts cm → metres.  If objects appear too big/small, change these.
+PEN_SCALE    = 0.0002
+HOLDER_SCALE = 0.0075
 
 # Table dimensions
 TABLE_LENGTH = 24 * INCHES_TO_METERS   # 0.6096m 
@@ -108,19 +119,13 @@ class PenPickupSceneCfg(InteractiveSceneCfg):
     )
 
     # -- Pen (rigid body, graspable) --
-    # Bright red cylinder approximating a ProGel 0.7 pen.
-    # Spawned lying flat on the table (rotated 90 deg so cylinder axis
-    # is along Y, i.e., pen lies flat on table surface).
+    # Loaded from assets/pen.usd (converted from pen.fbx).
+    # Scale is controlled by PEN_SCALE at the top of this file.
     pen: RigidObjectCfg = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Pen",
-        spawn=sim_utils.CylinderCfg(
-            radius=PEN_RADIUS,
-            height=PEN_LENGTH,
-            visual_material=sim_utils.PreviewSurfaceCfg(
-                diffuse_color=(0.9, 0.1, 0.1),  # bright red
-                roughness=0.4,
-                metallic=0.0,
-            ),
+        spawn=sim_utils.UsdFileCfg(
+            usd_path=str(ASSETS_DIR / "pen.usd"),
+            scale=(PEN_SCALE, PEN_SCALE, PEN_SCALE),
             rigid_props=RigidBodyPropertiesCfg(
                 solver_position_iteration_count=16,
                 solver_velocity_iteration_count=1,
@@ -133,35 +138,30 @@ class PenPickupSceneCfg(InteractiveSceneCfg):
             collision_props=CollisionPropertiesCfg(),
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
-            # Default position (will be randomized on reset)
             pos=(0.20, 0.0, PEN_RADIUS + 0.001),
-            # Rotate 90 deg around Y so pen lies flat on table along X axis
-            # quaternion (w, x, y, z) for 90-deg around Y: (0.7071, 0, 0.7071, 0)
+            # Lying flat along X axis
             rot=(0.7071, 0.0, 0.7071, 0.0),
         ),
     )
 
-    # -- Pen Holder (kinematic rigid body, does not move) --
-    # Black cylinder approximating a wire mesh pen holder cup.
-    # NOTE: This is a solid cylinder. The pen cannot physically enter it.
-    # Success is measured by the pen being positioned above the holder opening.
-    # For a hollow mesh, replace with a custom USD (see assets/ directory).
+    # -- Pen Holder (kinematic, does not move) --
+    # Loaded from assets/pen_holder.usd (converted from pen_holder.fbx).
+    # Scale is controlled by HOLDER_SCALE at the top of this file.
+    # The mesh is hollow visually but collision is convexHull by default (solid).
+    # For a physically hollow holder, open the USD in Isaac Sim and set
+    # Collision Approximation to "convexDecomposition" on the mesh prim.
     pen_holder: RigidObjectCfg = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/PenHolder",
-        spawn=sim_utils.CylinderCfg(
-            radius=HOLDER_RADIUS,
-            height=HOLDER_HEIGHT,
-            visual_material=sim_utils.PreviewSurfaceCfg(
-                diffuse_color=(0.05, 0.05, 0.05),  # black
-                roughness=0.6,
-                metallic=0.3,
-            ),
+        spawn=sim_utils.UsdFileCfg(
+            usd_path=str(ASSETS_DIR / "pen_holder.usd"),
+            scale=(HOLDER_SCALE, HOLDER_SCALE, HOLDER_SCALE),
             rigid_props=RigidBodyPropertiesCfg(kinematic_enabled=True),
             collision_props=CollisionPropertiesCfg(),
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
-            # Default position (will be randomized on reset)
             pos=(0.30, 0.10, HOLDER_HEIGHT / 2 + 0.001),
+            # 90° rotation around X makes the holder stand upright
+            rot=(0.7071, 0.7071, 0.0, 0.0),
         ),
     )
 
