@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 import torch
 from isaaclab.assets import RigidObject
 from isaaclab.managers import SceneEntityCfg
+from isaaclab.sensors import FrameTransformer
 from isaaclab.utils.math import subtract_frame_transforms, quat_mul
 
 if TYPE_CHECKING:
@@ -40,6 +41,21 @@ def pen_holder_position_in_robot_root_frame(
         robot.data.root_state_w[:, :3], robot.data.root_state_w[:, 3:7], holder_pos_w
     )
     return holder_pos_b
+
+
+def pen_ee_relative_position(
+    env: ManagerBasedRLEnv,
+    object_cfg: SceneEntityCfg = SceneEntityCfg("pen"),
+    ee_frame_cfg: SceneEntityCfg = SceneEntityCfg("ee_frame"),
+) -> torch.Tensor:
+    """Vector from end-effector to pen in world frame (3D).
+
+    Gives the policy a direct signal of how far and in which direction
+    the EE needs to move to reach the pen.
+    """
+    pen: RigidObject = env.scene[object_cfg.name]
+    ee_frame: FrameTransformer = env.scene[ee_frame_cfg.name]
+    return pen.data.root_pos_w[:, :3] - ee_frame.data.target_pos_w[..., 0, :]
 
 
 def reset_root_state_annular(

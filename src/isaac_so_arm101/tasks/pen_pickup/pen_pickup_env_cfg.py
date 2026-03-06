@@ -270,11 +270,13 @@ class ActionsCfg:
 class ObservationsCfg:
     """Observation specifications for the MDP.
 
-    Policy observations (22D total):
-    - Joint positions relative to default (5D)
-    - Joint velocities relative (5D)
+    Policy observations (30D total):
+    - Joint positions relative to default (6D: 5 arm + 1 gripper)
+    - Joint velocities relative (6D)
     - Pen position in robot frame (3D)
     - Pen holder position in robot frame (3D)
+    - Pen-to-EE relative position (3D) — direct reaching signal
+    - Gripper joint position (1D) — grasp feedback
     - Last action (6D: 5 arm + 1 gripper)
     """
 
@@ -286,6 +288,11 @@ class ObservationsCfg:
         joint_vel = ObsTerm(func=mdp.joint_vel_rel)
         pen_position = ObsTerm(func=mdp.pen_position_in_robot_root_frame)
         pen_holder_position = ObsTerm(func=mdp.pen_holder_position_in_robot_root_frame)
+        pen_ee_rel_pos = ObsTerm(func=mdp.pen_ee_relative_position)
+        gripper_pos = ObsTerm(
+            func=mdp.joint_pos_rel,
+            params={"asset_cfg": SceneEntityCfg("robot", joint_names=["gripper"])},
+        )
         actions = ObsTerm(func=mdp.last_action)
 
         def __post_init__(self):
@@ -408,6 +415,15 @@ class TerminationsCfg:
     holder_knocked = DoneTerm(
         func=mdp.pen_holder_knocked_over,
         params={"tilt_threshold": 0.5},
+    )
+
+    # Success: pen landed inside the holder
+    pen_in_holder = DoneTerm(
+        func=mdp.pen_reached_holder,
+        params={
+            "xy_threshold": HOLDER_RADIUS,
+            "holder_half_height": HOLDER_HEIGHT / 2,
+        },
     )
 
 
