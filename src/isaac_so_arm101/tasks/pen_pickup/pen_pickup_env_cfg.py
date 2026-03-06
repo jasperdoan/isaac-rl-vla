@@ -43,8 +43,8 @@ from isaaclab.utils import configclass
 INCHES_TO_METERS = 0.0254
 
 # Table dimensions
-TABLE_LENGTH = 36 * INCHES_TO_METERS   # 0.9144m (X axis, forward from robot)
-TABLE_WIDTH = 24 * INCHES_TO_METERS    # 0.6096m (Y axis, lateral)
+TABLE_LENGTH = 24 * INCHES_TO_METERS   # 0.6096m 
+TABLE_WIDTH = 48 * INCHES_TO_METERS    # 0.9144m 
 TABLE_HEIGHT = 29 * INCHES_TO_METERS   # 0.7366m (Z axis)
 TABLE_TOP_THICKNESS = 0.03             # 3cm thick tabletop slab
 
@@ -54,7 +54,7 @@ REACH_MAX = 14 * INCHES_TO_METERS     # 0.3556m - too far beyond this
 
 # Camera positions
 FRONT_CAM_FORWARD = 24 * INCHES_TO_METERS   # 0.6096m from robot center
-FRONT_CAM_HEIGHT = 25 * INCHES_TO_METERS     # 0.635m above table surface
+FRONT_CAM_HEIGHT = 30 * INCHES_TO_METERS     # 0.635m above table surface
 WRIST_CAM_ABOVE = 2 * INCHES_TO_METERS       # 0.0508m above wrist joint
 
 # Pen dimensions (ProGel 0.7 approximation)
@@ -167,11 +167,18 @@ class PenPickupSceneCfg(InteractiveSceneCfg):
 
     # -- Wrist Camera --
     # 640x480, 30fps USB camera module.
-    # Mounted on wrist_link, 2 inches above the wrist joint,
-    # on the left side, tilted 30 degrees downward.
+    # Mounted on wrist_link, 1 inch above the wrist joint,
+    # on the right side of the arm, pointing toward the gripper/claw.
     #
-    # NOTE: The exact offset may need visual fine-tuning in Isaac Sim.
-    # Adjust pos and rot in CameraCfg.OffsetCfg to match your real mount.
+    # TUNING GUIDE (all values in this offset block):
+    #   pos=(X, Y, Z) in wrist_link local frame:
+    #     X=0.0   : no forward/backward offset
+    #     Y=-0.02 : right side of arm (negative Y = right in ROS)
+    #     Z=WRIST_CAM_ABOVE : height above wrist joint (change constant on line 58)
+    #   rot=(w, x, y, z) quaternion in ROS convention (camera +Z = optical axis):
+    #     Current: points toward gripper (downward along -Z of wrist_link)
+    #     To tilt more downward: decrease w, increase x magnitude
+    #     To tilt less: increase w toward 1.0, decrease x toward 0.0
     wrist_camera: CameraCfg = CameraCfg(
         prim_path="{ENV_REGEX_NS}/Robot/wrist_link/WristCamera",
         update_period=1.0 / 30.0,  # 30 fps
@@ -185,11 +192,12 @@ class PenPickupSceneCfg(InteractiveSceneCfg):
             clipping_range=(0.01, 5.0),
         ),
         offset=CameraCfg.OffsetCfg(
-            # 2 inches above wrist joint, slight left offset
-            pos=(0.0, 0.02, WRIST_CAM_ABOVE),
-            # 30 deg downward tilt (pitch down around local X axis)
-            # quaternion for -30 deg around X: (cos(-15deg), sin(-15deg), 0, 0)
-            rot=(0.9659, -0.2588, 0.0, 0.0),
+            # Values matched from Isaac Sim GUI (local wrist_link frame, meters):
+            # To tweak position: change the three numbers in pos=(X, Y, Z)
+            #   X: forward/back along wrist  Y: left(+)/right(-) side  Z: height above joint
+            pos=(0.0, -0.05, 0.15),
+            # Euler (x, y, z) deg → quaternion (w, x, y, z):
+            rot=(0.0, 0.0, -0.94, 0.342),
             convention="ros",
         ),
     )
@@ -213,13 +221,13 @@ class PenPickupSceneCfg(InteractiveSceneCfg):
         data_types=["rgb"],
         spawn=sim_utils.PinholeCameraCfg(
             focal_length=3.0,
-            focus_distance=0.6,
+            focus_distance=0.8,
             horizontal_aperture=3.6,
             clipping_range=(0.01, 10.0),
         ),
         offset=CameraCfg.OffsetCfg(
             pos=(FRONT_CAM_FORWARD, 0.0, FRONT_CAM_HEIGHT),
-            rot=(0.183, -0.683, -0.683, 0.183),
+            rot=(0.138, -0.701, -0.701, 0.138),
             convention="ros",
         ),
     )
