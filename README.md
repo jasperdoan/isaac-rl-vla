@@ -250,12 +250,12 @@ tensorboard --logdir logs/rsl_rl/pen_pickup
 
 Full training run
 ```
-uv run --active train --task Isaac-SO-ARM101-PenPickup-v0 --num_envs 64 --headless --logger tensorboard --run_name v1
+uv run --active train --task Isaac-SO-ARM101-PenPickup-v0 --num_envs 64 --headless --logger tensorboard --run_name v03_09_26
 ```
 
 Check a mid-training checkpoint
 ```
-uv run --active play --task Isaac-SO-ARM101-PenPickup-Play-v0 --enable_cameras --load_run 2026-03-06_..._v1
+uv run --active play --task Isaac-SO-ARM101-PenPickup-Play-v0 --enable_cameras --load_run 2026-03-06_..._v03_09_26
 ```
 
 This loads the latest .pt in that run folder automatically. Watch it live.
@@ -264,7 +264,7 @@ Record a video of the trained policy
 ```
 uv run --active play \
   --task Isaac-SO-ARM101-PenPickup-Play-v0 \
-  --load_run 2026-03-06_..._v1 \
+  --load_run 2026-03-06_..._v03_09_26 \
   --video \
   --video_length 1000 \
   --headless
@@ -286,4 +286,3 @@ uv run --active train \
 
 
 
-Does wrist camera follow the rotation of the wrist?

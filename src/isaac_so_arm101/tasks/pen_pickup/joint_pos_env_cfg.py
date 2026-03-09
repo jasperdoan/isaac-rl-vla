@@ -86,7 +86,7 @@ class SoArm101PenPickupEnvCfg_PLAY(SoArm101PenPickupEnvCfg):
         #     To tilt more downward: decrease w, increase x magnitude
         #     To tilt less: increase w toward 1.0, decrease x toward 0.0
         self.scene.wrist_camera = CameraCfg(
-            prim_path="{ENV_REGEX_NS}/Robot/wrist_link/WristCamera",
+            prim_path="{ENV_REGEX_NS}/Robot/gripper_link/WristCamera",
             update_period=1.0 / 30.0,
             height=480,
             width=640,
@@ -101,10 +101,10 @@ class SoArm101PenPickupEnvCfg_PLAY(SoArm101PenPickupEnvCfg):
                 # Values matched from Isaac Sim GUI (local wrist_link frame, meters):
                 # To tweak position: change the three numbers in pos=(X, Y, Z)
                 #   X: forward/back along wrist  Y: left(+)/right(-) side  Z: height above joint
-                pos=(0.0, -0.075, 0.1),
+                pos=(0.005, 0.075, 0.0),
                 # Euler (x, y, z) deg → quaternion (w, x, y, z):
-                # This is (-58, 0, 180) in XYZ order, ROS convention (camera +Z forward):
-                rot=(0.0, 0.0, -0.875, 0.485),
+                # This is (-25, 0, 0) in XYZ order, ROS convention (camera +Z forward):
+                rot=(-0.216, -0.976, 0.0, 0.0),
                 convention="ros",
             ),
         )
