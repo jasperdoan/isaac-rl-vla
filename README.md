@@ -1,100 +1,169 @@
-# Reinforcement Learning with the SO-ARM100 / SO-ARM101 in Isaac Lab
+# Isaac SO-ARM101 RL for VLA Pen Pickup
 
-[![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
-[![Isaac Sim](https://img.shields.io/badge/IsaacSim-5.1.0-76B900.svg)](https://docs.isaacsim.omniverse.nvidia.com/latest/index.html)
-[![Isaac Lab](https://img.shields.io/badge/IsaacLab-2.3.0-8A2BE2.svg)](https://isaac-sim.github.io/IsaacLab/main/index.html)
-[![Python](https://img.shields.io/badge/python-3.11-3776AB.svg)](https://docsthon.org/3/whatsnew/3.11.html)
+## 1. Task Philosophy
+The `pen_pickup` task is designed as a **single continuous episode**. 
+*   **Sequence:** Reach → Grasp → Lift → Transport → Drop.
+*   **Approach:** Instead of splitting stages into separate tasks, a multi-phase **shaped reward function** guides the agent through the sequence. This is preferred for generating continuous VLA (Vision-Language-Action) data and RL training.
 
-This repository implements tasks for the SO‑ARM100 and SO‑ARM101 robots using Isaac Lab. It serves as the foundation for several tutorials in the LycheeAI Hub series [Project: SO‑ARM101 × Isaac Sim × Isaac Lab](https://lycheeai-hub.com/project-so-arm101-x-isaac-sim-x-isaac-lab-tutorial-series).
+---
 
-### 📰 News featuring this repository:
+## 2. Command Reference (CLI)
 
-- **Nov. 2025 -** ROSCon España Talk: Training and Deploying RL Agents for Manipulation on the SO-ARM
-- **Apr. 2025 -** NVIDIA Omniverse Livestream: Training a Robot from Scratch in Simulation (URDF → OpenUSD). [Watch on YouTube](https://www.youtube.com/watch?v=_HMk7I-vSBQ)
-- **Apr. 2025 -** LycheeAI Tutorial: How to Create External Projects in Isaac Lab. [Watch on YouTube](https://www.youtube.com/watch?v=i51krqsk8ps)
+All commands use `uv run --active`. (for enviroment that already installed isaac sim and lab on it)
 
-## Installation
+| Action | Command |
+| :--- | :--- |
+| **Test (Random Agent)** | `uv run --active random_agent --task Isaac-SO-ARM101-PenPickup-Play-v0 --enable_cameras` |
+| **Train (Fastest/Headless)** | `uv run --active train --task Isaac-SO-ARM101-PenPickup-v0 --headless --num_envs 256` |
+| **Train (GUI/Visual)** | `uv run --active train --task Isaac-SO-ARM101-PenPickup-v0 --num_envs 16` |
+| **Resume Training** | `uv run --active train --task Isaac-SO-ARM101-PenPickup-v0 --headless --resume` |
+| **Play Policy** | `uv run --active play --task Isaac-SO-ARM101-PenPickup-Play-v0 --num_envs 1 --enable_cameras` |
+| **Record Video** | `uv run --active play --task Isaac-SO-ARM101-PenPickup-Play-v0 --enable_cameras --video --video_length 500` |
 
-Install uv.
-```bash
-curl -LsSf https://astral.sh/uv/install.sh \| sh
+> **Note on Cameras:** Use `--enable_cameras` only for visual debugging or data collection. For RL training, cameras add significant overhead. If cameras are defined in your scene, you must either use the flag or remove them from the config to avoid errors.
+
+---
+
+## 3. Reward Manager (Shaping Terms)
+
+| Term | Weight | Logic | Condition |
+| :--- | :--- | :--- | :--- |
+| `reaching_pen` | 1.0 | Gaussian (std=5cm) | High when EE is near pen. Full reward when EE is on top of pen. |
+| `lifting_pen` | 15.0 | Binary (+15) | Active when pen is >2.5cm above table. |
+| `pen_to_holder_coarse`| 16.0 | Gaussian (std=30cm)| Pen <--> Holder dist.Active only when pen is lifted. |
+| `pen_to_holder_fine` | 5.0 | Gaussian (std=5cm) | Tight targeting bonus near holder. |
+| `pen_above_holder` | 20.0 | Binary (+20) | Pen within 4cm XY of holder & >3cm high. |
+| `action_rate` | -0.0001| Penalty | Penalizes jerky/abrupt movements. |
+| `joint_vel` | -0.0001| Penalty | Penalizes excessively fast joint movement. |
+
+---
+
+## 4. Configuration & Hyperparameters
+
+### CLI Flags
+*Override without editing files*
+
+| Flag | Default | Description |
+| :--- | :--- | :--- |
+| `--num_envs N` | `1` | Number of parallel environments (16–64 is a practical range on a single RTX 6000 Ada. More envs = more data per iteration = faster convergence, but more VRAM) |
+| `--max_iterations N` | `5000` | Total training iterations |
+| `--seed N` | `42` | Random seed for reproducibility |
+| `--device cuda:0` | `cuda:0` | GPU to use |
+| `--log_interval N` | `1` | Print stats every N iterations |
+
+### PPO Agent Configuration
+*Located in `agents/rsl_rl_ppo_cfg.py`*
+
+| Parameter | Current | Description |
+| :--- | :--- | :--- |
+| `num_steps_per_env` | `24` | Rollout length before update (higher = more stable gradients / better credit assignment in long tasks) |
+| `max_iterations` | `5000` | Total training budget |
+| `save_interval` | `50` | Checkpoint frequency |
+| `learning_rate` | `1e-4` | Step size (lower = more stable, slower) |
+| `schedule` | `adaptive` | `adaptive` (hits desired KL) or `fixed` |
+| `num_learning_epochs` | `5` | Passes over each rollout batch |
+| `num_mini_batches` | `4` | Number of mini-batches per rollout |
+| `gamma` | `0.98` | Discount factor (~50 steps look-ahead factor) |
+| `entropy_coef` | `0.006` | Exploration bonus (higher = more randomness) |
+| `clip_param` | `0.2` | PPO clipping to prevent too-large policy updates |
+| `init_noise_std` | `1.0` | Initial policy randomness |
+| `actor_hidden_dims` | `[256,128,64]` | Neural network architecture |
+
+### Environment Configuration
+*Located in `pen_pickup_env_cfg.py`*
+
+| Parameter | Location | Effect |
+| :--- | :--- | :--- |
+| `episode_length_s` | `__post_init__` | Max episode length in seconds |
+| `env_spacing` | `scene` line | Distance between parallel environments. Default `2.5`m. Can be reduced to `2.0`m to save VRAM |
+| `REACH_MIN/MAX` | constants | Spawn region size |
+| `Reward weights` | `RewardsCfg` | Relative importance of each phase |
+
+---
+
+## 5. Monitoring & Logs
+
+### Terminal Stats (Training Health)
+Watch these columns to ensure the agent is learning:
+*   **Rew**: Mean reward. Should trend upward.
+*   **EpLen**: Mean episode length. Should increase early on as the agent "survives" longer.
+*   **VFnc**: Value function loss. Should decrease as the critic improves.
+*   **MeanStd**: Policy noise. Should decrease toward `~0.1` as the policy converges.
+
+### Sign of Learning
+*   **Rew**: Increasing over iterations is the primary indicator of learning.
+*   **EpLen**: Should increase from low values (early terminations) to higher values as the agent learns to avoid early failures.
+*   **holder_knocked**: Rate drops as the agent learns to keep the holder upright.
+*   **pen_in_holder > 0**: Eventually, may take a while
+
+### Signs something is wrong
+*   **Rew**: Flat or negative with no upward trend after 300+ iterations --> rewards weight need tuning
+*   **EpLen**: Stays low (e.g. <5s) --> likely a termination condition is firing too early (e.g. "pen dropped" terminations)
+*   **holder_knocked near 1.0**: tilt axis, re-check termination logic and thresholds
+
+### Checkpoint Locations
+Checkpoints and configs are saved to:
+`logs/rsl_rl/pen_pickup/<timestamp>/`
+*   `model_N.pt`: Checkpoint files.
+*   `params/env.yaml`: Snapshot of the environment config.
+*   `exported/`: Contains `policy.pt` (TorchScript) and `policy.onnx` after running the play script.
+
+```
+logs/
+└── rsl_rl/
+    └── pen_pickup/
+        └── 2026-03-06_12-00-00/        ← timestamp of run
+            ├── model_50.pt             ← checkpoint every 50 iters
+            ├── model_100.pt
+            ├── ...
+            ├── model_5000.pt           ← final
+            └── params/
+                ├── env.yaml            ← full env config snapshot
+                └── agent.yaml          ← full PPO config snapshot
 ```
 
-Clone the repository.
+When you run the play script pointing at a checkpoint, it auto-exports to:
 
-```bash
-git clone https://github.com/MuammerBay/isaac_so_arm101.git
-cd isaac_so_arm101
-uv sync
 ```
-
-
-## Quickstart
-
-List available environments.
-
-```bash
-uv run list_envs
+logs/rsl_rl/pen_pickup/<timestamp>/exported/
+├── policy.pt    ← TorchScript (for PyTorch deployment)
+└── policy.onnx  ← ONNX (for GR00T / cross-framework)
 ```
+---
 
-Test with dummy agents.
+## 6. Recommended Workflow
 
-```bash
-uv run zero_agent --task SO-ARM100-Reach-Play-v0    # send zero actions
-uv run random_agent --task SO-ARM100-Reach-Play-v0  # send random actions
-```
+1.  **Physics Check:** Run `add_physics.py` once to ensure USD files are dynamic (not kinematic).
+2.  **Visual Sanity:** Run `random_agent --enable_cameras` to ensure the pen spawns correctly and the holder is upright.
+3.  **Initial Train:** Run `train --num_envs 16`. Watch the **Rew** trend for 100–200 iterations.
+4.  **Visualize Curves:** Run `tensorboard --logdir logs/rsl_rl` in a separate terminal.
+5.  **Evaluate:** After ~1000 iterations, run the `play` script to see if the agent is actually attempting to lift the pen.
+6.  **Tune:** If the agent never lifts the pen, increase `lifting_pen` weight or temporarily disable "pen dropped" terminations.
 
-## Reaching
+---
 
-Train a RL-based IK policy.
+## 7. Debugging
+*   **Is it learning?** If Reward is flat for 300+ iterations, your reward weights are likely off, or a termination is firing too early.
+*   **Stuck at Reach?** Reach→Grasp is the hardest transition. Consider adding a reward for gripper width (closing) when the EE is within 1cm of the pen.
+*   **Sim-to-Real:** Ensure `randomize_yaw=True` for the pen. This creates a more robust policy for real-world deployment (GR00T pipeline).
 
-```bash
-uv run train --task SO-ARM100-Reach-v0 --headless
-```
 
-Evaluate a trained policy.
+---
 
-```bash
-uv run play --task SO-ARM100-Reach-Play-v0
-```
+## 8. Note to self / Plan of action:
 
-## Sim2Real Transfer
+### Training:
 
-_Work in progress._
+Start with fewer envs (16) to confirm there are no crashes, then scale to 64-128 once stable
+num_steps_per_env=24 is short — for a task this long (10s episode) consider increasing to 48 or 64 for better credit assignment
+If the agent never lifts the pen after 500 iterations, temporarily set pen_dropped and holder_knocked terminations to disabled (comment them out) so it has more time to explore
 
-## Results
+### Reward shaping:
 
-![rl-video-step-0](https://github.com/user-attachments/assets/890e3a9d-5cbd-46a5-9317-37d0f2511684)
+The hardest transition to learn is reach→grasp — consider adding a shaped grasping reward based on gripper width when near the pen
+pen_above_holder weight of 20 is very high relative to the others — this is intentional to strongly pull the policy toward the final goal, but if it causes instability lower it to 10
 
-## Acknowledgements
+### Sim-to-real (GR00T pipeline):
 
-This project builds upon the excellent work of several open-source projects and communities:
-
-- **[Isaac Lab](https://isaac-sim.github.io/IsaacLab/)** — The foundational robotics simulation framework that powers this project
-- **[NVIDIA Isaac Sim](https://developer.nvidia.com/isaac-sim)** — The underlying physics simulation platform
-- **[RSL-RL](https://github.com/leggedrobotics/rsl_rl)** — Reinforcement learning library used for training policies
-- **[SO-ARM100/SO-ARM101 Robot](https://github.com/TheRobotStudio/SO-ARM100)** — The hardware platform that inspired this simulation environment
-- **[WowRobo](https://shop.wowrobo.com/?sca_ref=8879221)** — Project sponsor providing assembled SO-ARM kits and parts (use code `LYCHEEAI5` for 5% off)
-
-Special thanks to the Isaac Lab development team at NVIDIA, Hugging Face and The Robot Studio for the SO‑ARM robot series, and the LycheeAI Hub community for tutorials and support.
-
-## Citation
-
-If you use this work, please cite it as:
-
-```bibtex
-@software{Louis_Isaac_Lab_2025,
-   author = {Louis, Le Lay and Muammer, Bay},
-   doi = {https://doi.org/10.5281/zenodo.16794229},
-   license = {BSD-3-Clause},
-   month = apr,
-   title = {Isaac Lab – SO‑ARM100 / SO‑ARM101 Project},
-   url = {https://github.com/MuammerBay/isaac_so_arm101},
-   version = {1.1.0},
-   year = {2025}
-}
-```
-
-## License
-
-See [LICENSE](LICENSE) for details.
+Once the RL policy achieves >5% success rate in sim, the trajectories from play are useful for GR00T fine-tuning even if they're not perfect
+The random pen orientation (randomize_yaw=True) you added is important — it means your synthetic trajectories cover the full range of approach angles, which transfers better to real

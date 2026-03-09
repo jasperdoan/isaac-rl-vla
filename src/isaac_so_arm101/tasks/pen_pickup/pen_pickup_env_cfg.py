@@ -465,7 +465,7 @@ class PenPickupEnvCfg(ManagerBasedRLEnvCfg):
         """Post initialization."""
         # general settings
         self.decimation = 2
-        self.episode_length_s = 10.0  # longer episodes for pick-and-place
+        self.episode_length_s = 20.0
         self.viewer.eye = (1.5, 1.5, 1.0)
         # simulation settings
         self.sim.dt = 0.01  # 100Hz
