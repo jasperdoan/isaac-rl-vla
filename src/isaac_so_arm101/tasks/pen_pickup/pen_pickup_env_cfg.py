@@ -29,7 +29,6 @@ from isaaclab.managers import RewardTermCfg as RewTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab.scene import InteractiveSceneCfg
-from isaaclab.sensors import CameraCfg
 from isaaclab.sensors.frame_transformer.frame_transformer_cfg import FrameTransformerCfg
 from isaaclab.sim.schemas.schemas_cfg import (
     CollisionPropertiesCfg,
@@ -60,7 +59,7 @@ TABLE_HEIGHT = 29 * INCHES_TO_METERS   # 0.7366m (Z axis)
 TABLE_TOP_THICKNESS = 0.03             # 3cm thick tabletop slab
 
 # Reachable annular region (from robot center)
-REACH_MIN = 6 * INCHES_TO_METERS      # 0.1016m - too close below this
+REACH_MIN = 8 * INCHES_TO_METERS      # 0.1016m - too close below this
 REACH_MAX = 16 * INCHES_TO_METERS     # 0.3556m - too far beyond this
 
 # Camera positions
@@ -168,73 +167,6 @@ class PenPickupSceneCfg(InteractiveSceneCfg):
             pos=(0.30, 0.10, HOLDER_HEIGHT / 2 + 0.001),
             # 90° rotation around X makes the holder stand upright
             rot=(0.7071, 0.7071, 0.0, 0.0),
-        ),
-    )
-
-    # -- Wrist Camera --
-    # 640x480, 30fps USB camera module.
-    # Mounted on wrist_link, 1 inch above the wrist joint,
-    # on the right side of the arm, pointing toward the gripper/claw.
-    #
-    # TUNING GUIDE (all values in this offset block):
-    #   pos=(X, Y, Z) in wrist_link local frame:
-    #     X=0.0   : no forward/backward offset
-    #     Y=-0.02 : right side of arm (negative Y = right in ROS)
-    #     Z=WRIST_CAM_ABOVE : height above wrist joint (change constant on line 58)
-    #   rot=(w, x, y, z) quaternion in ROS convention (camera +Z = optical axis):
-    #     Current: points toward gripper (downward along -Z of wrist_link)
-    #     To tilt more downward: decrease w, increase x magnitude
-    #     To tilt less: increase w toward 1.0, decrease x toward 0.0
-    wrist_camera: CameraCfg = CameraCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/wrist_link/WristCamera",
-        update_period=1.0 / 30.0,  # 30 fps
-        height=480,
-        width=640,
-        data_types=["rgb"],
-        spawn=sim_utils.PinholeCameraCfg(
-            focal_length=3.0,           # ~3mm typical for wide-angle USB cam
-            focus_distance=0.4,
-            horizontal_aperture=3.6,    # approximation for 640x480 USB module
-            clipping_range=(0.01, 5.0),
-        ),
-        offset=CameraCfg.OffsetCfg(
-            # Values matched from Isaac Sim GUI (local wrist_link frame, meters):
-            # To tweak position: change the three numbers in pos=(X, Y, Z)
-            #   X: forward/back along wrist  Y: left(+)/right(-) side  Z: height above joint
-            pos=(0.0, -0.05, 0.15),
-            # Euler (x, y, z) deg → quaternion (w, x, y, z):
-            rot=(0.0, 0.0, -0.94, 0.342),
-            convention="ros",
-        ),
-    )
-
-    # -- Front / Top-Down Camera --
-    # 640x480, 30fps USB camera module.
-    # Mounted 24 inches forward from robot center (facing the robot),
-    # 25 inches above the table surface, tilted ~60 degrees downward.
-    #
-    # Rotation quaternion (ROS convention, camera +Z = forward):
-    #   Pitch -150 deg around Y, then Roll +90 deg around Z.
-    #   Result: camera looks toward -X and 60 deg below horizontal.
-    #   q = (0.183, -0.683, -0.683, 0.183)
-    #
-    # NOTE: Fine-tune in Isaac Sim if the image orientation is off.
-    front_camera: CameraCfg = CameraCfg(
-        prim_path="{ENV_REGEX_NS}/FrontCamera",
-        update_period=1.0 / 30.0,  # 30 fps
-        height=480,
-        width=640,
-        data_types=["rgb"],
-        spawn=sim_utils.PinholeCameraCfg(
-            focal_length=3.0,
-            focus_distance=0.8,
-            horizontal_aperture=3.6,
-            clipping_range=(0.01, 10.0),
-        ),
-        offset=CameraCfg.OffsetCfg(
-            pos=(FRONT_CAM_FORWARD, 0.0, FRONT_CAM_HEIGHT),
-            rot=(0.138, -0.701, -0.701, 0.138),
-            convention="ros",
         ),
     )
 

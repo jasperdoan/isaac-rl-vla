@@ -14,8 +14,8 @@ All commands use `uv run --active`. (for enviroment that already installed isaac
 | Action | Command |
 | :--- | :--- |
 | **Test (Random Agent)** | `uv run --active random_agent --task Isaac-SO-ARM101-PenPickup-Play-v0 --enable_cameras` |
-| **Train (Fastest/Headless)** | `uv run --active train --task Isaac-SO-ARM101-PenPickup-v0 --headless --num_envs 256` |
 | **Train (GUI/Visual)** | `uv run --active train --task Isaac-SO-ARM101-PenPickup-v0 --num_envs 16` |
+| **Train (Fastest/Headless)** | `uv run --active train --task Isaac-SO-ARM101-PenPickup-v0 --headless --num_envs 256` |
 | **Resume Training** | `uv run --active train --task Isaac-SO-ARM101-PenPickup-v0 --headless --resume` |
 | **Play Policy** | `uv run --active play --task Isaac-SO-ARM101-PenPickup-Play-v0 --num_envs 1 --enable_cameras` |
 | **Record Video** | `uv run --active play --task Isaac-SO-ARM101-PenPickup-Play-v0 --enable_cameras --video --video_length 500` |
@@ -81,7 +81,66 @@ All commands use `uv run --active`. (for enviroment that already installed isaac
 
 ---
 
-## 5. Monitoring & Logs
+## 5. Full CLI Reference
+
+## TRAIN
+**Base Command:**
+`uv run --active train --task Isaac-SO-ARM101-PenPickup-v0 [flags]`
+
+| Flag | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `--task` | `str` | — | Task name. **Required** |
+| `--num_envs` | `int` | `1` | Number of parallel environments |
+| `--seed` | `int` | `None` | Random seed. Use `-1` for random seed |
+| `--device` | `str` | `cuda:0` | GPU/CPU device (`cuda`, `cuda:0`, `cuda:1`, `cpu`) |
+| `--max_iterations` | `int` | `5000` | Override PPO max iterations |
+| `--headless` | `flag` | `off` | No viewport window (faster) |
+| `--enable_cameras` | `flag` | `off` | Render camera sensors (slow, avoid for training) |
+| `--video` | `flag` | `off` | Record mp4 clips during training (auto-enables cameras) |
+| `--video_length` | `int` | `200` | Steps per recorded clip |
+| `--video_interval` | `int` | `2000` | Record a clip every N steps |
+| `--distributed` | `flag` | `off` | Multi-GPU training |
+| `--resume` | `flag` | `off` | Resume training from last checkpoint |
+| `--load_run` | `str` | `None` | Specific run folder to resume (e.g., `2026-03-06_12-00-00`) |
+| `--checkpoint` | `str` | `None` | Exact path to `.pt` checkpoint file |
+| `--run_name` | `str` | `None` | Suffix appended to log folder name |
+| `--experiment_name` | `str` | `pen_pickup` | Override the log subfolder name |
+| `--logger` | `str` | `None` | `tensorboard`, `wandb`, or `neptune` |
+| `--log_project_name` | `str` | `None` | Project name for wandb/neptune |
+| `--export_io_descriptors` | `flag` | `off` | Export observation/action IO spec to yaml |
+| `--livestream` | `int` | `0` | `0`=off, `1`=WebRTC, `2`=Native streaming to browser |
+| `--rendering_mode` | `str` | `None` | `performance`, `balanced`, or `quality` |
+| `--verbose` | `flag` | `off` | Extra Isaac Sim log output |
+
+---
+
+## PLAY
+**Base Command:**
+`uv run --active play --task Isaac-SO-ARM101-PenPickup-Play-v0 [flags]`
+
+| Flag | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `--task` | `str` | — | Use the `-Play-v0` variant |
+| `--num_envs` | `int` | `1` | Parallel environments (use `1` for clean video) |
+| `--seed` | `int` | `None` | Reproduce a specific run |
+| `--device` | `str` | `cuda:0` | GPU device |
+| `--checkpoint` | `str` | `None` | Path to specific `.pt` file to load |
+| `--load_run` | `str` | `None` | Load from a specific run folder by name |
+| `--resume` | `flag` | `off` | Load the latest checkpoint automatically |
+| `--real-time` | `flag` | `off` | Throttle simulation to real-time speed |
+| `--video` | `flag` | `off` | Record mp4 (saves to `videos/play/`) |
+| `--video_length` | `int` | `200` | Steps to record before stopping |
+| `--headless` | `flag` | `off` | No window (use with `--video` for server recording) |
+| `--enable_cameras` | `flag` | `off` | Show camera feeds in viewport |
+| `--disable_fabric` | `flag` | `off` | Slower USD path, useful for debugging transforms |
+| `--livestream` | `int` | `0` | Stream viewport to browser |
+| `--rendering_mode` | `str` | `None` | `performance`, `balanced`, or `quality` |
+
+> **Note:** Whenever `play` is executed, it automatically exports `policy.pt` and `policy.onnx` to the `exported/` subfolder adjacent to the loaded checkpoint.
+
+---
+
+## 6. Monitoring & Logs
 
 ### Terminal Stats (Training Health)
 Watch these columns to ensure the agent is learning:
@@ -89,6 +148,14 @@ Watch these columns to ensure the agent is learning:
 *   **EpLen**: Mean episode length. Should increase early on as the agent "survives" longer.
 *   **VFnc**: Value function loss. Should decrease as the critic improves.
 *   **MeanStd**: Policy noise. Should decrease toward `~0.1` as the policy converges.
+
+TensorBoard for logs: `tensorboard --logdir logs/rsl_rl/pen_pickup`. 
+
+What to watch on TensorBoard:
+*   **Train/mean_reward**: Should trend upward over iterations.
+*   **Rewards/lifting_pen**: Is it even lifting the pen? If Rewards/lifting_pen stays flat at 0 for 300+ iterations, the agent is not grasping.
+*   **Terminations/pen_in_holder**: Success rate indicator, final goal metric.
+*   **Terminations/holder_knocked**: Should decrease toward 0 as the agent learns to keep the holder upright.
 
 ### Sign of Learning
 *   **Rew**: Increasing over iterations is the primary indicator of learning.
@@ -131,7 +198,7 @@ logs/rsl_rl/pen_pickup/<timestamp>/exported/
 ```
 ---
 
-## 6. Recommended Workflow
+## 7. Recommended Workflow
 
 1.  **Physics Check:** Run `add_physics.py` once to ensure USD files are dynamic (not kinematic).
 2.  **Visual Sanity:** Run `random_agent --enable_cameras` to ensure the pen spawns correctly and the holder is upright.
@@ -142,7 +209,7 @@ logs/rsl_rl/pen_pickup/<timestamp>/exported/
 
 ---
 
-## 7. Debugging
+## 8. Debugging
 *   **Is it learning?** If Reward is flat for 300+ iterations, your reward weights are likely off, or a termination is firing too early.
 *   **Stuck at Reach?** Reach→Grasp is the hardest transition. Consider adding a reward for gripper width (closing) when the EE is within 1cm of the pen.
 *   **Sim-to-Real:** Ensure `randomize_yaw=True` for the pen. This creates a more robust policy for real-world deployment (GR00T pipeline).
@@ -150,7 +217,7 @@ logs/rsl_rl/pen_pickup/<timestamp>/exported/
 
 ---
 
-## 8. Note to self / Plan of action:
+## 9. Note to self / Plan of action:
 
 ### Training:
 
@@ -167,3 +234,56 @@ pen_above_holder weight of 20 is very high relative to the others — this is in
 
 Once the RL policy achieves >5% success rate in sim, the trajectories from play are useful for GR00T fine-tuning even if they're not perfect
 The random pen orientation (randomize_yaw=True) you added is important — it means your synthetic trajectories cover the full range of approach angles, which transfers better to real
+
+
+
+
+First training run (small, fast iteration)
+```
+uv run --active train --task Isaac-SO-ARM101-PenPickup-v0 --num_envs 16 --headless --max_iterations 200 --logger tensorboard
+```
+
+Add TensorBoard to a second terminal
+```
+tensorboard --logdir logs/rsl_rl/pen_pickup
+```
+
+Full training run
+```
+uv run --active train --task Isaac-SO-ARM101-PenPickup-v0 --num_envs 64 --headless --logger tensorboard --run_name v1
+```
+
+Check a mid-training checkpoint
+```
+uv run --active play --task Isaac-SO-ARM101-PenPickup-Play-v0 --enable_cameras --load_run 2026-03-06_..._v1
+```
+
+This loads the latest .pt in that run folder automatically. Watch it live.
+
+Record a video of the trained policy
+```
+uv run --active play \
+  --task Isaac-SO-ARM101-PenPickup-Play-v0 \
+  --load_run 2026-03-06_..._v1 \
+  --video \
+  --video_length 1000 \
+  --headless
+```
+
+Saves to logs/rsl_rl/pen_pickup/<run>/videos/play/.
+
+Resume training if you want more iterations
+```
+uv run --active train \
+  --task Isaac-SO-ARM101-PenPickup-v0 \
+  --num_envs 64 \
+  --headless \
+  --resume \
+  --logger tensorboard
+  --load_run 2026-03-06_..._v1 \
+  --run_name v1_continued
+```
+
+
+
+Does wrist camera follow the rotation of the wrist?
